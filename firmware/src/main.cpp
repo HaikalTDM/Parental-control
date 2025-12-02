@@ -84,9 +84,28 @@ void setupRoutes() {
     String response = "[]";
     if (!error && doc.containsKey("result")) {
       JsonArray result = doc["result"];
-      if (result.size() > 1) {
-        // The actual data is usually in result[1]
-        serializeJson(result[1], response);
+      if (result.size() > 1 && result[1].containsKey("dhcp_leases")) {
+        // Extract the dhcp_leases array
+        JsonArray leases = result[1]["dhcp_leases"];
+        
+        // Format into our expected device format
+        DynamicJsonDocument devicesDoc(4096);
+        JsonArray devices = devicesDoc.to<JsonArray>();
+        
+        int id = 1;
+        for (JsonObject lease : leases) {
+          JsonObject device = devices.createNestedObject();
+          device["id"] = id++;
+          device["name"] = lease["hostname"].as<String>();
+          device["type"] = "device";
+          device["status"] = "online";
+          device["blocked"] = false;
+          device["usage"] = "0 GB";
+          device["ip"] = lease["ipaddr"].as<String>();
+          device["mac"] = lease["macaddr"].as<String>();
+        }
+        
+        serializeJson(devices, response);
       }
     }
     
