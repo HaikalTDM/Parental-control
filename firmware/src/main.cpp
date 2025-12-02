@@ -75,16 +75,7 @@ void setupRoutes() {
   });
 
   server.on("/api/devices", HTTP_GET, [](AsyncWebServerRequest *request){
-    String response;
-    
-    if (SIMULATION_MODE) {
-        // Mock Data for Demonstration
-        response = "[{\"id\":1,\"name\":\"Atif's iPad\",\"type\":\"tablet\",\"status\":\"online\",\"blocked\":true,\"usage\":\"1.2 GB\"},{\"id\":2,\"name\":\"Dad's Laptop\",\"type\":\"laptop\",\"status\":\"online\",\"blocked\":true,\"usage\":\"4.5 GB\"},{\"id\":3,\"name\":\"Living Room TV\",\"type\":\"tv\",\"status\":\"offline\",\"blocked\":true,\"usage\":\"0 GB\"}]";
-    } else {
-        // Production: Return empty list until MikroTik Parser is implemented
-        response = "[]";
-    }
-    
+    String response = router.getDevices();
     request->send(200, "application/json", response);
   });
 
@@ -92,7 +83,22 @@ void setupRoutes() {
       request->send(200, "application/json", "{\"apps\":{},\"custom\":[]}");
   });
 
+  server.on("/api/blocklist/app", HTTP_POST, [](AsyncWebServerRequest *request){}, NULL,
+    [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+      request->send(200, "application/json", "{}");
+  });
+
+  server.on("/api/blocklist/custom", HTTP_POST, [](AsyncWebServerRequest *request){}, NULL,
+    [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+      request->send(200, "application/json", "[]");
+  });
+
   server.on("/api/allowlist", HTTP_GET, [](AsyncWebServerRequest *request){
+      request->send(200, "application/json", "[]");
+  });
+
+  server.on("/api/allowlist", HTTP_POST, [](AsyncWebServerRequest *request){}, NULL,
+    [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
       request->send(200, "application/json", "[]");
   });
 

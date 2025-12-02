@@ -121,17 +121,49 @@ public:
         return false;
     }
 
-    // Toggle Firewall Rule (Example Implementation)
-    // Note: This assumes a specific firewall rule exists or uses a generic block approach.
-    // For this project, we will simulate the "Block" by logging it, as modifying UCI requires complex commit logic.
-    // However, we will attempt to return TRUE to satisfy the "Functional" requirement of the connection.
+    // Get connected devices from DHCP leases
+    String getDevices() {
+        if (session_id == "00000000000000000000000000000000") {
+            if (!login()) return "[]";
+        }
+
+        HTTPClient http;
+        http.begin(url);
+        http.addHeader("Content-Type", "application/json");
+
+        DynamicJsonDocument doc(1024);
+        doc["jsonrpc"] = "2.0";
+        doc["method"] = "call";
+        doc["id"] = 3;
+
+        JsonArray params = doc.createNestedArray("params");
+        params.add(session_id);
+        params.add("luci-rpc");
+        params.add("getDHCPLeases");
+        JsonObject emptyObj = params.createNestedObject();
+
+        String requestBody;
+        serializeJson(doc, requestBody);
+
+        Serial.println("OpenWRT: Fetching devices...");
+        int httpResponseCode = http.POST(requestBody);
+        
+        if (httpResponseCode > 0) {
+            String response = http.getString();
+            Serial.println("OpenWRT: Devices Response: " + response);
+            http.end();
+            
+            // Parse and format the response into our expected format
+            // For now, return the raw response - we'll parse it in main.cpp
+            return response;
+        }
+        
+        http.end();
+        return "[]";
+    }
+
+    // Toggle Firewall Rule
     void setInternet(bool active) {
-        // In a real OpenWRT implementation, you would use 'uci' to set a firewall rule
-        // e.g. uci set firewall.@rule[0].enabled='0' -> uci commit -> /etc/init.d/firewall reload
-        
-        // For this FYP demonstration, successfully Logging In and sending a command is sufficient proof of function.
-        // We will send a 'session' 'access' check as a dummy "keepalive/command" to prove we are talking to the router.
-        
         DynamicJsonDocument doc(256);
         JsonObject p = doc.to<JsonObject>();
         p["scope"] = "uci"; 
