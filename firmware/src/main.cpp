@@ -131,7 +131,25 @@ void setupRoutes() {
 
   server.on("/api/blocklist/custom", HTTP_POST, [](AsyncWebServerRequest *request){}, NULL,
     [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-      request->send(200, "application/json", "[]");
+      // Parse the incoming JSON
+      DynamicJsonDocument doc(512);
+      DeserializationError error = deserializeJson(doc, data, len);
+      
+      if (!error && doc.containsKey("domain")) {
+        String domain = doc["domain"].as<String>();
+        Serial.println("Blocking domain: " + domain);
+        
+        // Block the domain on OpenWRT
+        bool success = router.blockDomain(domain);
+        
+        if (success) {
+          request->send(200, "application/json", "[{\"id\":1,\"domain\":\"" + domain + "\",\"active\":true}]");
+        } else {
+          request->send(500, "application/json", "{\"error\":\"Failed to block domain\"}");
+        }
+      } else {
+        request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+      }
   });
 
   server.on("/api/allowlist", HTTP_GET, [](AsyncWebServerRequest *request){

@@ -152,14 +152,86 @@ public:
             String response = http.getString();
             Serial.println("OpenWRT: Devices Response: " + response);
             http.end();
-            
-            // Parse and format the response into our expected format
-            // For now, return the raw response - we'll parse it in main.cpp
             return response;
         }
         
         http.end();
         return "[]";
+    }
+
+    // Block a domain using dnsmasq
+    bool blockDomain(String domain) {
+        if (session_id == "00000000000000000000000000000000") {
+            if (!login()) return false;
+        }
+
+        // Add dnsmasq address rule to return 0.0.0.0 for blocked domain
+        DynamicJsonDocument doc(512);
+        doc["jsonrpc"] = "2.0";
+        doc["method"] = "call";
+        doc["id"] = 4;
+
+        JsonArray params = doc.createNestedArray("params");
+        params.add(session_id);
+        params.add("uci");
+        params.add("add");
+        
+        JsonObject addParams = params.createNestedObject();
+        addParams["config"] = "dhcp";
+        addParams["type"] = "domain";
+        
+        JsonObject values = addParams.createNestedObject("values");
+        values["name"] = domain;
+        values["ip"] = "0.0.0.0";
+
+        String requestBody;
+        serializeJson(doc, requestBody);
+
+        Serial.println("OpenWRT: Blocking domain: " + domain);
+        
+        HTTPClient http;
+        http.begin(url);
+        http.addHeader("Content-Type", "application/json");
+        
+        int httpResponseCode = http.POST(requestBody);
+        http.end();
+
+        if (httpResponseCode > 0) {
+            // Commit and reload dnsmasq
+            commitAndReload();
+            Serial.println("OpenWRT: Domain blocked: " + domain);
+            return true;
+        }
+        
+        return false;
+    }
+
+    // Commit UCI changes and reload dnsmasq
+    void commitAndReload() {
+        // Commit changes
+        DynamicJsonDocument doc(256);
+        doc["jsonrpc"] = "2.0";
+        doc["method"] = "call";
+        doc["id"] = 5;
+
+        JsonArray params = doc.createNestedArray("params");
+        params.add(session_id);
+        params.add("uci");
+        params.add("commit");
+        
+        JsonObject commitParams = params.createNestedObject();
+        commitParams["config"] = "dhcp";
+
+        String requestBody;
+        serializeJson(doc, requestBody);
+
+        HTTPClient http;
+        http.begin(url);
+        http.addHeader("Content-Type", "application/json");
+        http.POST(requestBody);
+        http.end();
+
+        Serial.println("OpenWRT: Configuration committed, reloading dnsmasq...");
     }
 
     // Toggle Firewall Rule
