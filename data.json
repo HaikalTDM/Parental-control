@@ -1,0 +1,59 @@
+{
+  "internet_active": true,
+  "devices": [
+    {
+      "id": 1,
+      "name": "Atif's iPad",
+      "type": "tablet",
+      "status": "online",
+      "blocked": true,
+      "usage": "1.2 GB"
+    },
+    {
+      "id": 2,
+      "name": "Dad's Laptop",
+      "type": "laptop",
+      "status": "online",
+      "blocked": true,
+      "usage": "4.5 GB"
+    },
+    {
+      "id": 3,
+      "name": "Living Room TV",
+      "type": "tv",
+      "status": "offline",
+      "blocked": true,
+      "usage": "0 GB"
+    }
+  ],
+  "blocked_apps": {
+    "youtube": false,
+    "tiktok": false,
+    "roblox": false,
+    "instagram": false
+  },
+  "custom_blocklist": [
+    {
+      "id": 1,
+      "domain": "gambling.com",
+      "active": true
+    },
+    {
+      "id": 2,
+      "domain": "adult-site.com",
+      "active": true
+    }
+  ],
+  "allowlist": [
+    {
+      "id": 1,
+      "domain": "google.com",
+      "active": true
+    },
+    {
+      "id": 2,
+      "domain": "myschool.edu",
+      "active": true
+    }
+  ]
+}
