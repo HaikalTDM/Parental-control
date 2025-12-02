@@ -82,11 +82,18 @@ void setupRoutes() {
         response = "[{\"id\":1,\"name\":\"Atif's iPad\",\"type\":\"tablet\",\"status\":\"online\",\"blocked\":true,\"usage\":\"1.2 GB\"},{\"id\":2,\"name\":\"Dad's Laptop\",\"type\":\"laptop\",\"status\":\"online\",\"blocked\":true,\"usage\":\"4.5 GB\"},{\"id\":3,\"name\":\"Living Room TV\",\"type\":\"tv\",\"status\":\"offline\",\"blocked\":true,\"usage\":\"0 GB\"}]";
     } else {
         // Production: Return empty list until MikroTik Parser is implemented
-        // TODO: Implement response parsing from MikroTik API
         response = "[]";
     }
     
     request->send(200, "application/json", response);
+  });
+
+  server.on("/api/blocklist", HTTP_GET, [](AsyncWebServerRequest *request){
+      request->send(200, "application/json", "{\"apps\":{},\"custom\":[]}");
+  });
+
+  server.on("/api/allowlist", HTTP_GET, [](AsyncWebServerRequest *request){
+      request->send(200, "application/json", "[]");
   });
 
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
@@ -96,6 +103,8 @@ void setupRoutes() {
   server.onNotFound([](AsyncWebServerRequest *request) {
     if (request->method() == HTTP_OPTIONS) {
       request->send(200);
+    } else if (request->url().startsWith("/api/")) {
+      request->send(404, "application/json", "{\"error\":\"Not found\"}");
     } else {
       request->send(LittleFS, "/index.html");
     }
