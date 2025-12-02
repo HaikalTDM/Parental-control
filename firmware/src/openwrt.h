@@ -159,13 +159,47 @@ public:
         return "[]";
     }
 
-    // Block a domain using dnsmasq
+    // Block a domain using dnsmasq address directive
     bool blockDomain(String domain) {
         if (session_id == "00000000000000000000000000000000") {
             if (!login()) return false;
         }
 
-        // Add dnsmasq address rule to return 0.0.0.0 for blocked domain
+        Serial.println("OpenWRT: Starting domain block for: " + domain);
+
+        // Step 1: Add a new 'address' section to dhcp config
+        String sectionName = addDhcpSection();
+        if (sectionName == "") {
+            Serial.println("OpenWRT: Failed to add section");
+            return false;
+        }
+        
+        Serial.println("OpenWRT: Added section: " + sectionName);
+
+        // Step 2: Set the domain name
+        if (!setUciValue("dhcp", sectionName, "name", domain)) {
+            Serial.println("OpenWRT: Failed to set domain name");
+            return false;
+        }
+
+        // Step 3: Set IP to 0.0.0.0
+        if (!setUciValue("dhcp", sectionName, "ip", "0.0.0.0")) {
+            Serial.println("OpenWRT: Failed to set IP");
+            return false;
+        }
+
+        // Step 4: Commit and reload
+        if (!commitConfig("dhcp")) {
+            Serial.println("OpenWRT: Failed to commit config");
+            return false;
+        }
+
+        Serial.println("OpenWRT: Successfully blocked domain: " + domain);
+        return true;
+    }
+
+    // Add a new section to UCI config
+    String addDhcpSection() {
         DynamicJsonDocument doc(512);
         doc["jsonrpc"] = "2.0";
         doc["method"] = "call";
@@ -178,17 +212,87 @@ public:
         
         JsonObject addParams = params.createNestedObject();
         addParams["config"] = "dhcp";
-        addParams["type"] = "domain";
-        
-        JsonObject values = addParams.createNestedObject("values");
-        values["name"] = domain;
-        values["ip"] = "0.0.0.0";
+        addParams["type"] = "address";
 
         String requestBody;
         serializeJson(doc, requestBody);
 
-        Serial.println("OpenWRT: Blocking domain: " + domain);
+        HTTPClient http;
+        http.begin(url);
+        http.addHeader("Content-Type", "application/json");
         
+        int httpResponseCode = http.POST(requestBody);
+        String response = "";
+        
+        if (httpResponseCode > 0) {
+            response = http.getString();
+            Serial.println("OpenWRT: Add section response: " + response);
+            
+            // Parse response to get section name
+            DynamicJsonDocument resDoc(1024);
+            deserializeJson(resDoc, response);
+            
+            if (resDoc.containsKey("result") && resDoc["result"].size() > 1) {
+                String section = resDoc["result"][1].as<String>();
+                http.end();
+                return section;
+            }
+        }
+        
+        http.end();
+        return "";
+    }
+
+    // Set a UCI value
+    bool setUciValue(String config, String section, String option, String value) {
+        DynamicJsonDocument doc(512);
+        doc["jsonrpc"] = "2.0";
+        doc["method"] = "call";
+        doc["id"] = 5;
+
+        JsonArray params = doc.createNestedArray("params");
+        params.add(session_id);
+        params.add("uci");
+        params.add("set");
+        
+        JsonObject setParams = params.createNestedObject();
+        setParams["config"] = config;
+        setParams["section"] = section;
+        
+        JsonObject values = setParams.createNestedObject("values");
+        values[option] = value;
+
+        String requestBody;
+        serializeJson(doc, requestBody);
+
+        HTTPClient http;
+        http.begin(url);
+        http.addHeader("Content-Type", "application/json");
+        
+        int httpResponseCode = http.POST(requestBody);
+        http.end();
+
+        return httpResponseCode > 0;
+    }
+
+    // Commit UCI changes
+    bool commitConfig(String config) {
+        DynamicJsonDocument doc(256);
+        doc["jsonrpc"] = "2.0";
+        doc["method"] = "call";
+        doc["id"] = 6;
+
+        JsonArray params = doc.createNestedArray("params");
+        params.add(session_id);
+        params.add("uci");
+        params.add("commit");
+        
+        JsonObject commitParams = params.createNestedObject();
+        commitParams["config"] = config;
+
+        String requestBody;
+        serializeJson(doc, requestBody);
+
         HTTPClient http;
         http.begin(url);
         http.addHeader("Content-Type", "application/json");
@@ -197,30 +301,32 @@ public:
         http.end();
 
         if (httpResponseCode > 0) {
-            // Commit and reload dnsmasq
-            commitAndReload();
-            Serial.println("OpenWRT: Domain blocked: " + domain);
+            Serial.println("OpenWRT: Configuration committed successfully");
+            
+            // Reload dnsmasq service
+            reloadDnsmasq();
             return true;
         }
         
+        Serial.println("OpenWRT: Failed to commit configuration");
         return false;
     }
 
-    // Commit UCI changes and reload dnsmasq
-    void commitAndReload() {
-        // Commit changes
-        DynamicJsonDocument doc(256);
+    // Reload dnsmasq service
+    void reloadDnsmasq() {
+        DynamicJsonDocument doc(512);
         doc["jsonrpc"] = "2.0";
         doc["method"] = "call";
-        doc["id"] = 5;
+        doc["id"] = 7;
 
         JsonArray params = doc.createNestedArray("params");
         params.add(session_id);
-        params.add("uci");
-        params.add("commit");
+        params.add("rc");
+        params.add("init");
         
-        JsonObject commitParams = params.createNestedObject();
-        commitParams["config"] = "dhcp";
+        JsonObject initParams = params.createNestedObject();
+        initParams["name"] = "dnsmasq";
+        initParams["action"] = "reload";
 
         String requestBody;
         serializeJson(doc, requestBody);
@@ -228,10 +334,11 @@ public:
         HTTPClient http;
         http.begin(url);
         http.addHeader("Content-Type", "application/json");
+        
         http.POST(requestBody);
         http.end();
 
-        Serial.println("OpenWRT: Configuration committed, reloading dnsmasq...");
+        Serial.println("OpenWRT: Dnsmasq reloaded");
     }
 
     // Toggle Firewall Rule
