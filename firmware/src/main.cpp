@@ -75,7 +75,21 @@ void setupRoutes() {
   });
 
   server.on("/api/devices", HTTP_GET, [](AsyncWebServerRequest *request){
-    String response = router.getDevices();
+    String rawResponse = router.getDevices();
+    
+    // Parse the JSON-RPC response
+    DynamicJsonDocument doc(4096);
+    DeserializationError error = deserializeJson(doc, rawResponse);
+    
+    String response = "[]";
+    if (!error && doc.containsKey("result")) {
+      JsonArray result = doc["result"];
+      if (result.size() > 1) {
+        // The actual data is usually in result[1]
+        serializeJson(result[1], response);
+      }
+    }
+    
     request->send(200, "application/json", response);
   });
 
