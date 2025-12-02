@@ -76,38 +76,46 @@ void setupRoutes() {
 
   server.on("/api/devices", HTTP_GET, [](AsyncWebServerRequest *request){
     String rawResponse = router.getDevices();
+    Serial.println("Raw device response: " + rawResponse);
+    
+    // Create response document
+    DynamicJsonDocument responseDoc(4096);
+    JsonArray devices = responseDoc.to<JsonArray>();
     
     // Parse the JSON-RPC response
     DynamicJsonDocument doc(4096);
     DeserializationError error = deserializeJson(doc, rawResponse);
     
-    String response = "[]";
     if (!error && doc.containsKey("result")) {
+      Serial.println("Parsing OpenWRT result...");
       JsonArray result = doc["result"];
+      
       if (result.size() > 1 && result[1].containsKey("dhcp_leases")) {
-        // Extract the dhcp_leases array
         JsonArray leases = result[1]["dhcp_leases"];
-        
-        // Format into our expected device format
-        DynamicJsonDocument devicesDoc(4096);
-        JsonArray devices = devicesDoc.to<JsonArray>();
+        Serial.print("Found ");
+        Serial.print(leases.size());
+        Serial.println(" devices");
         
         int id = 1;
         for (JsonObject lease : leases) {
           JsonObject device = devices.createNestedObject();
           device["id"] = id++;
-          device["name"] = lease["hostname"].as<String>();
+          device["name"] = lease["hostname"] | "Unknown";
           device["type"] = "device";
           device["status"] = "online";
           device["blocked"] = false;
           device["usage"] = "0 GB";
-          device["ip"] = lease["ipaddr"].as<String>();
-          device["mac"] = lease["macaddr"].as<String>();
         }
-        
-        serializeJson(devices, response);
+      } else {
+        Serial.println("No dhcp_leases found in result");
       }
+    } else {
+      Serial.println("Failed to parse JSON or no result");
     }
+    
+    String response;
+    serializeJson(devices, response);
+    Serial.println("Sending devices: " + response);
     
     request->send(200, "application/json", response);
   });
