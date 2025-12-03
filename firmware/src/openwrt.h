@@ -233,9 +233,14 @@ public:
             deserializeJson(resDoc, response);
             
             if (resDoc.containsKey("result") && resDoc["result"].size() > 1) {
-                String section = resDoc["result"][1].as<String>();
-                http.end();
-                return section;
+                // Result format: [0, {"section":"cfg0553eb"}]
+                JsonObject resultObj = resDoc["result"][1];
+                if (resultObj.containsKey("section")) {
+                    String section = resultObj["section"].as<String>();
+                    Serial.println("OpenWRT: Parsed section name: " + section);
+                    http.end();
+                    return section;
+                }
             }
         }
         
