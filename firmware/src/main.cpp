@@ -269,6 +269,24 @@ void setupRoutes() {
       request->send(200, "application/json", "[]");
   });
 
+  // New Adblock endpoints
+  server.on("/api/adblock/status", HTTP_GET, [](AsyncWebServerRequest *request){
+    String response = router.getAdblockStatus();
+    request->send(200, "application/json", response);
+  });
+
+  server.on("/api/adblock/logs", HTTP_GET, [](AsyncWebServerRequest *request){
+    String response = router.getAdblockLogs();
+    request->send(200, "application/json", response);
+  });
+
+  server.on("/api/adblock/reload", HTTP_POST, [](AsyncWebServerRequest *request){
+    // Trigger adblock reload by reloading dnsmasq
+    router.reloadDnsmasq();
+    request->send(200, "application/json", "{\"status\":\"reload triggered\"}");
+  });
+
+
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type");

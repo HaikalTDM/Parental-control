@@ -56,5 +56,6 @@
       "active": true
     }
   ],
-  "adblock_status": "loading"
+  "adblock_status": "error",
+  "adblock_logs": []
 }

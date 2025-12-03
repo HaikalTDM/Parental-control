@@ -434,6 +434,139 @@ public:
              Serial.println("OpenWRT: Command Failed");
         }
     }
+
+    // Get adblock status by checking if adblock daemon is running
+    String getAdblockStatus() {
+        if (session_id == "00000000000000000000000000000000") {
+            if (!login()) return "{\"status\":\"error\"}";
+        }
+
+        HTTPClient http;
+        http.begin(url);
+        http.addHeader("Content-Type", "application/json");
+
+        DynamicJsonDocument doc(512);
+        doc["jsonrpc"] = "2.0";
+        doc["method"] = "call";
+        doc["id"] = 10;
+
+        JsonArray params = doc.createNestedArray("params");
+        params.add(session_id);
+        params.add("rc");
+        params.add("list");
+        JsonObject emptyObj = params.createNestedObject();
+
+        String requestBody;
+        serializeJson(doc, requestBody);
+
+        int httpResponseCode = http.POST(requestBody);
+        String status = "idle"; // Default status
+        
+        if (httpResponseCode > 0) {
+            String response = http.getString();
+            // Check if adblock service is running
+            if (response.indexOf("adblock") >= 0 && response.indexOf("running") >= 0) {
+                status = "idle";
+            }
+        }
+        
+        http.end();
+        return "{\"status\":\"" + status + "\"}";
+    }
+
+    // Get adblock logs from syslog
+    String getAdblockLogs() {
+        if (session_id == "00000000000000000000000000000000") {
+            if (!login()) return "[]";
+        }
+
+        HTTPClient http;
+        http.begin(url);
+        http.addHeader("Content-Type", "application/json");
+
+        DynamicJsonDocument doc(512);
+        doc["jsonrpc"] = "2.0";
+        doc["method"] = "call";
+        doc["id"] = 11;
+
+        JsonArray params = doc.createNestedArray("params");
+        params.add(session_id);
+        params.add("file");
+        params.add("exec");
+        
+        JsonObject execParams = params.createNestedObject();
+        execParams["command"] = "logread";
+        JsonArray argsArray = execParams.createNestedArray("params");
+        argsArray.add("-e");
+        argsArray.add("adblock");
+
+        String requestBody;
+        serializeJson(doc, requestBody);
+
+        Serial.println("OpenWRT: Fetching adblock logs...");
+        int httpResponseCode = http.POST(requestBody);
+        
+        if (httpResponseCode > 0) {
+            String response = http.getString();
+            Serial.println("OpenWRT: Log Response: " + response);
+            
+            // Parse the response to extract logs
+            DynamicJsonDocument resDoc(8192);
+            deserializeJson(resDoc, response);
+            
+            if (resDoc.containsKey("result") && resDoc["result"].size() > 1) {
+                JsonObject resultObj = resDoc["result"][1];
+                if (resultObj.containsKey("stdout")) {
+                    String logOutput = resultObj["stdout"].as<String>();
+                    
+                    // Parse log lines and create JSON array
+                    DynamicJsonDocument logsDoc(6144);
+                    JsonArray logsArray = logsDoc.to<JsonArray>();
+                    
+                    int startIdx = 0;
+                    int lineCount = 0;
+                    while (startIdx < logOutput.length() && lineCount < 50) {
+                        int endIdx = logOutput.indexOf('\n', startIdx);
+                        if (endIdx == -1) endIdx = logOutput.length();
+                        
+                        String line = logOutput.substring(startIdx, endIdx);
+                        if (line.length() > 0) {
+                            // Parse log line: timestamp + message
+                            int colonIdx = line.indexOf(": ");
+                            if (colonIdx > 0) {
+                                JsonObject logEntry = logsArray.createNestedObject();
+                                logEntry["timestamp"] = line.substring(0, colonIdx);
+                                logEntry["message"] = line.substring(colonIdx + 2);
+                                
+                                // Determine log level
+                                String message = line.substring(colonIdx + 2);
+                                message.toLowerCase();
+                                if (message.indexOf("failed") >= 0 || message.indexOf("error") >= 0) {
+                                    logEntry["level"] = "error";
+                                } else if (message.indexOf("successfully") >= 0 || message.indexOf("loaded") >= 0) {
+                                    logEntry["level"] = "success";
+                                } else {
+                                    logEntry["level"] = "info";
+                                }
+                                
+                                lineCount++;
+                            }
+                        }
+                        
+                        startIdx = endIdx + 1;
+                    }
+                    
+                    String logsJson;
+                    serializeJson(logsArray, logsJson);
+                    http.end();
+                    return logsJson;
+                }
+            }
+        }
+        
+        http.end();
+        return "[]";
+    }
 };
 
 #endif
