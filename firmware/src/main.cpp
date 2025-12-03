@@ -21,6 +21,116 @@ AsyncWebServer server(80);
 Preferences preferences;
 OpenWRTClient router(routerHost, routerUser, routerPass);
 
+// Blocklist storage
+const int MAX_BLOCKED_DOMAINS = 50;
+String blockedDomains[MAX_BLOCKED_DOMAINS];
+int blockedDomainsCount = 0;
+
+// Load blocklist from Preferences
+void loadBlocklist() {
+  preferences.begin("blocklist", true); // Read-only
+  blockedDomainsCount = preferences.getInt("count", 0);
+  
+  for (int i = 0; i < blockedDomainsCount && i < MAX_BLOCKED_DOMAINS; i++) {
+    String key = "domain" + String(i);
+    blockedDomains[i] = preferences.getString(key.c_str(), "");
+  }
+  
+  preferences.end();
+  Serial.print("Loaded ");
+  Serial.print(blockedDomainsCount);
+  Serial.println(" blocked domains");
+}
+
+// Save blocklist to Preferences
+void saveBlocklist() {
+  preferences.begin("blocklist", false); // Read-write
+  preferences.putInt("count", blockedDomainsCount);
+  
+  for (int i = 0; i < blockedDomainsCount; i++) {
+    String key = "domain" + String(i);
+    preferences.putString(key.c_str(), blockedDomains[i]);
+  }
+  
+  preferences.end();
+  Serial.print("Saved ");
+  Serial.print(blockedDomainsCount);
+  Serial.println(" blocked domains");
+}
+
+// Add domain to blocklist
+bool addBlockedDomain(String domain) {
+  // Check if already exists
+  for (int i = 0; i < blockedDomainsCount; i++) {
+    if (blockedDomains[i] == domain) {
+      Serial.println("Domain already blocked: " + domain);
+      return false;
+    }
+  }
+  
+  // Add to array
+  if (blockedDomainsCount < MAX_BLOCKED_DOMAINS) {
+    blockedDomains[blockedDomainsCount] = domain;
+    blockedDomainsCount++;
+    saveBlocklist();
+    
+    // Add to OpenWRT
+    if (router.blockDomain(domain)) {
+      Serial.println("Domain added and blocked: " + domain);
+      return true;
+    } else {
+      // Rollback if OpenWRT fails
+      blockedDomainsCount--;
+      saveBlocklist();
+      Serial.println("Failed to block domain on router: " + domain);
+      return false;
+    }
+  }
+  
+  Serial.println("Blocklist full!");
+  return false;
+}
+
+// Remove domain from blocklist
+bool removeBlockedDomain(String domain) {
+  for (int i = 0; i < blockedDomainsCount; i++) {
+    if (blockedDomains[i] == domain) {
+      // Shift array left
+      for (int j = i; j < blockedDomainsCount - 1; j++) {
+        blockedDomains[j] = blockedDomains[j + 1];
+      }
+      blockedDomainsCount--;
+      saveBlocklist();
+      
+      // Remove from OpenWRT
+      router.unblockDomain(domain);
+      
+      Serial.println("Domain removed: " + domain);
+      return true;
+    }
+  }
+  
+  Serial.println("Domain not found: " + domain);
+  return false;
+}
+
+// Get blocklist as JSON array
+String getBlocklistJSON() {
+  DynamicJsonDocument doc(2048);
+  JsonArray customArray = doc.createNestedArray("custom");
+  
+  for (int i = 0; i < blockedDomainsCount; i++) {
+    JsonObject domainObj = customArray.createNestedObject();
+    domainObj["id"] = i + 1;
+    domainObj["domain"] = blockedDomains[i];
+    domainObj["active"] = true;
+  }
+  
+  String response;
+  serializeJson(doc, response);
+  return response;
+}
+
 struct Device {
   int id;
   String name;
@@ -120,7 +230,8 @@ void setupRoutes() {
   });
 
   server.on("/api/blocklist", HTTP_GET, [](AsyncWebServerRequest *request){
-      request->send(200, "application/json", "{\"apps\":{},\"custom\":[]}");
+      String response = getBlocklistJSON();
+      request->send(200, "application/json", response);
   });
 
   server.on("/api/blocklist/app", HTTP_POST, [](AsyncWebServerRequest *request){}, NULL,
@@ -130,19 +241,17 @@ void setupRoutes() {
 
   server.on("/api/blocklist/custom", HTTP_POST, [](AsyncWebServerRequest *request){}, NULL,
     [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-      // Parse the incoming JSON
       DynamicJsonDocument doc(512);
       DeserializationError error = deserializeJson(doc, data, len);
       
       if (!error && doc.containsKey("domain")) {
         String domain = doc["domain"].as<String>();
-        Serial.println("Blocking domain: " + domain);
+        Serial.println("Adding domain to blocklist: " + domain);
         
-        // Block the domain on OpenWRT
-        bool success = router.blockDomain(domain);
-        
-        if (success) {
-          request->send(200, "application/json", "[{\"id\":1,\"domain\":\"" + domain + "\",\"active\":true}]");
+        if (addBlockedDomain(domain)) {
+          // Return full blocklist
+          String response = getBlocklistJSON();
+          request->send(200, "application/json", response);
         } else {
           request->send(500, "application/json", "{\"error\":\"Failed to block domain\"}");
         }
@@ -184,6 +293,10 @@ void setup() {
   }
 
   setupWiFi();
+  
+  // Load blocked domains from Preferences
+  loadBlocklist();
+  
   setupRoutes();
   
   server.begin();

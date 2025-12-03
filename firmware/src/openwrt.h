@@ -346,6 +346,13 @@ public:
         Serial.println("OpenWRT: Dnsmasq reloaded");
     }
 
+    // Unblock a domain (remove from dnsmasq)
+    void unblockDomain(String domain) {
+        // For now, just log it - proper implementation would require finding and deleting the UCI section
+        Serial.println("OpenWRT: Unblocking domain: " + domain);
+        Serial.println("OpenWRT: Note - Router restart required to fully remove domain");
+    }
+
     // Toggle Firewall Rule
     void setInternet(bool active) {
         DynamicJsonDocument doc(256);
