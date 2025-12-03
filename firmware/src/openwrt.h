@@ -159,7 +159,7 @@ public:
         return "[]";
     }
 
-    // Block a domain using dnsmasq address directive
+    // Block a domain using /etc/hosts file (most reliable method)
     bool blockDomain(String domain) {
         if (session_id == "00000000000000000000000000000000") {
             if (!login()) return false;
@@ -167,35 +167,104 @@ public:
 
         Serial.println("OpenWRT: Starting domain block for: " + domain);
 
-        // Step 1: Add a new 'address' section to dhcp config
-        String sectionName = addDhcpSection();
-        if (sectionName == "") {
-            Serial.println("OpenWRT: Failed to add section");
+        // Read current hosts file
+        String hostsContent = readHostsFile();
+        if (hostsContent == "") {
+            Serial.println("OpenWRT: Failed to read hosts file");
             return false;
+        }
+
+        // Check if domain already blocked
+        if (hostsContent.indexOf(domain) >= 0) {
+            Serial.println("OpenWRT: Domain already in hosts file");
+            return true;
+        }
+
+        // Add domain to hosts content
+        hostsContent += "0.0.0.0 " + domain + "\n";
+        hostsContent += "0.0.0.0 www." + domain + "\n";
+
+        // Write back to hosts file
+        if (writeHostsFile(hostsContent)) {
+            Serial.println("OpenWRT: Successfully blocked domain: " + domain);
+            return true;
+        }
+
+        Serial.println("OpenWRT: Failed to write hosts file");
+        return false;
+    }
+
+    // Read /etc/hosts file
+    String readHostsFile() {
+        DynamicJsonDocument doc(512);
+        doc["jsonrpc"] = "2.0";
+        doc["method"] = "call";
+        doc["id"] = 8;
+
+        JsonArray params = doc.createNestedArray("params");
+        params.add(session_id);
+        params.add("file");
+        params.add("read");
+        
+        JsonObject readParams = params.createNestedObject();
+        readParams["path"] = "/etc/hosts";
+
+        String requestBody;
+        serializeJson(doc, requestBody);
+
+        HTTPClient http;
+        http.begin(url);
+        http.addHeader("Content-Type", "application/json");
+        
+        int httpResponseCode = http.POST(requestBody);
+        String content = "";
+        
+        if (httpResponseCode > 0) {
+            String response = http.getString();
+            
+            // Parse response to get file content
+            DynamicJsonDocument resDoc(8192);
+            deserializeJson(resDoc, response);
+            
+            if (resDoc.containsKey("result") && resDoc["result"].size() > 1) {
+                JsonObject resultObj = resDoc["result"][1];
+                if (resultObj.containsKey("data")) {
+                    content = resultObj["data"].as<String>();
+                }
+            }
         }
         
-        Serial.println("OpenWRT: Added section: " + sectionName);
+        http.end();
+        return content;
+    }
 
-        // Step 2: Set the domain name
-        if (!setUciValue("dhcp", sectionName, "name", domain)) {
-            Serial.println("OpenWRT: Failed to set domain name");
-            return false;
-        }
+    // Write /etc/hosts file
+    bool writeHostsFile(String content) {
+        DynamicJsonDocument doc(8192);
+        doc["jsonrpc"] = "2.0";
+        doc["method"] = "call";
+        doc["id"] = 9;
 
-        // Step 3: Set IP to 0.0.0.0
-        if (!setUciValue("dhcp", sectionName, "ip", "0.0.0.0")) {
-            Serial.println("OpenWRT: Failed to set IP");
-            return false;
-        }
+        JsonArray params = doc.createNestedArray("params");
+        params.add(session_id);
+        params.add("file");
+        params.add("write");
+        
+        JsonObject writeParams = params.createNestedObject();
+        writeParams["path"] = "/etc/hosts";
+        writeParams["data"] = content;
 
-        // Step 4: Commit and reload
-        if (!commitConfig("dhcp")) {
-            Serial.println("OpenWRT: Failed to commit config");
-            return false;
-        }
+        String requestBody;
+        serializeJson(doc, requestBody);
 
-        Serial.println("OpenWRT: Successfully blocked domain: " + domain);
-        return true;
+        HTTPClient http;
+        http.begin(url);
+        http.addHeader("Content-Type", "application/json");
+        
+        int httpResponseCode = http.POST(requestBody);
+        http.end();
+
+        return httpResponseCode > 0;
     }
 
     // Add a new section to UCI config
