@@ -20,6 +20,3 @@ Thumbs.db
 # IDE
 .idea/
 *.swp
-
-# User configuration (don't overwrite client settings)
-firmware/src/config.h

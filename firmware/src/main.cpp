@@ -6,14 +6,20 @@
 #include <Preferences.h>
 
 #include "openwrt.h"
-#include "config.h"  // User configuration
+
+// Configuration - Update these with your actual credentials
+const char* ssid = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
+const char* routerHost = "192.168.10.100"; // OpenWRT IP
+const char* routerUser = "root";           // OpenWRT User
+const char* routerPass = "password";       // OpenWRT Password
 
 // Set to true for testing without a router, false for production
 #define SIMULATION_MODE false 
 
 AsyncWebServer server(80);
 Preferences preferences;
-OpenWRTClient router(ROUTER_HOST, ROUTER_USER, ROUTER_PASS);
+OpenWRTClient router(routerHost, routerUser, routerPass);
 
 struct Device {
   int id;
@@ -28,7 +34,7 @@ bool internetActive = true;
 
 void setupWiFi() {
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
