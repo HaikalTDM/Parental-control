@@ -3,7 +3,7 @@ import {
     Wifi, WifiOff, Smartphone, Shield, Clock, Home, Activity,
     Zap, Lock, Unlock, PlayCircle, Youtube, Facebook,
     Gamepad2, Instagram, Check, Plus, Trash2, Ban, Globe, ShieldCheck,
-    ArrowUp, ArrowDown, Users, ShieldAlert
+    ArrowUp, ArrowDown, Users, ShieldAlert, Terminal, ChevronDown, ChevronUp
 } from 'lucide-react';
 
 // UI Components
@@ -74,12 +74,110 @@ const StatCard = ({ icon: Icon, label, value, subValue, colorClass, bgClass }) =
     </Card>
 );
 
-const Dashboard = ({ internetActive, toggleInternet, devices, blockedApps, customBlockList, allowList }) => {
+const LogViewer = ({ logs, isLoading, expanded, toggleExpanded }) => {
+    const logContainerRef = React.useRef(null);
+
+    // Auto-scroll to bottom when new logs arrive
+    React.useEffect(() => {
+        if (logContainerRef.current && expanded) {
+            logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+        }
+    }, [logs, expanded]);
+
+    const getLogLevelColor = (level) => {
+        switch (level) {
+            case 'error':
+                return 'text-rose-600 bg-rose-50';
+            case 'success':
+                return 'text-emerald-600 bg-emerald-50';
+            default:
+                return 'text-blue-600 bg-blue-50';
+        }
+    };
+
+    return (
+        <Card className="overflow-hidden">
+            <button
+                onClick={toggleExpanded}
+                className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+            >
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-slate-100 rounded-lg text-slate-600">
+                        <Terminal className="w-5 h-5" />
+                    </div>
+                    <div className="text-left">
+                        <p className="text-sm font-bold text-slate-700">System Logs</p>
+                        <p className="text-xs text-slate-400">
+                            {isLoading ? 'Updating blocklist...' : `${logs.length} entries`}
+                        </p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    {isLoading && (
+                        <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
+                    )}
+                    {expanded ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+                </div>
+            </button>
+
+            {expanded && (
+                <div className="border-t border-slate-200">
+                    <div
+                        ref={logContainerRef}
+                        className="max-h-72 overflow-y-auto p-3 space-y-2 bg-slate-50/50"
+                    >
+                        {logs.length === 0 ? (
+                            <div className="text-center py-8 text-slate-400 text-sm">
+                                No logs available yet
+                            </div>
+                        ) : (
+                            logs.map((log, index) => (
+                                <div
+                                    key={index}
+                                    className={`p-2.5 rounded-lg border ${getLogLevelColor(log.level)} border-opacity-50`}
+                                >
+                                    <div className="flex items-start gap-2">
+                                        <div className="flex-1">
+                                            <p className="text-xs font-mono text-slate-500 mb-1">
+                                                {log.timestamp}
+                                            </p>
+                                            <p className="text-xs text-slate-700 leading-relaxed">
+                                                {log.message}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
+        </Card>
+    );
+};
+
+const Dashboard = ({ internetActive, toggleInternet, devices, blockedApps, customBlockList, allowList, adblockStatus, adblockLogs, logsExpanded, toggleLogsExpanded }) => {
     const onlineDevices = devices.filter(d => d.status === 'online').length;
     const totalAppsBlocked = Object.values(blockedApps).filter(Boolean).length;
     const activeCustomBlocks = customBlockList.filter(d => d.active).length;
     const totalBlocked = totalAppsBlocked + activeCustomBlocks;
     const totalAllowed = allowList.filter(d => d.active).length;
+
+    // Determine status display
+    const getStatusInfo = () => {
+        if (!internetActive) {
+            return { text: 'Internet Paused', color: 'bg-rose-500', pulse: false };
+        }
+        if (adblockStatus === 'loading') {
+            return { text: 'Loading Blocklist...', color: 'bg-amber-500', pulse: true };
+        }
+        if (adblockStatus === 'error') {
+            return { text: 'Adblock Error', color: 'bg-rose-500', pulse: true };
+        }
+        return { text: 'System Operational', color: 'bg-emerald-500', pulse: true };
+    };
+
+    const statusInfo = getStatusInfo();
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -88,8 +186,8 @@ const Dashboard = ({ internetActive, toggleInternet, devices, blockedApps, custo
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">System Overview</h1>
                     <div className="flex items-center gap-2 mt-1">
-                        <span className={`w-2 h-2 rounded-full ${internetActive ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
-                        <p className="text-sm text-slate-500 font-medium">{internetActive ? 'System Operational' : 'Internet Paused'}</p>
+                        <span className={`w-2 h-2 rounded-full ${statusInfo.color} ${statusInfo.pulse ? 'animate-pulse' : ''}`}></span>
+                        <p className="text-sm text-slate-500 font-medium">{statusInfo.text}</p>
                     </div>
                 </div>
                 <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200">
@@ -136,6 +234,13 @@ const Dashboard = ({ internetActive, toggleInternet, devices, blockedApps, custo
                     bgClass="bg-amber-50"
                 />
             </div>
+
+            <LogViewer
+                logs={adblockLogs}
+                isLoading={adblockStatus === 'loading'}
+                expanded={logsExpanded}
+                toggleExpanded={toggleLogsExpanded}
+            />
 
             <Card className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -398,6 +503,9 @@ const App = () => {
     const [customBlockList, setCustomBlockList] = useState([]);
     const [allowList, setAllowList] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [adblockStatus, setAdblockStatus] = useState('idle'); // idle, loading, error
+    const [adblockLogs, setAdblockLogs] = useState([]);
+    const [logsExpanded, setLogsExpanded] = useState(false);
 
     const API_URL = import.meta.env.DEV ? 'http://localhost:5050/api' : '/api';
 
@@ -405,23 +513,26 @@ const App = () => {
     React.useEffect(() => {
         const fetchData = async () => {
             try {
-                const [statusRes, devicesRes, blocklistRes, allowlistRes] = await Promise.all([
+                const [statusRes, devicesRes, blocklistRes, allowlistRes, adblockStatusRes] = await Promise.all([
                     fetch(`${API_URL}/status`),
                     fetch(`${API_URL}/devices`),
                     fetch(`${API_URL}/blocklist`),
-                    fetch(`${API_URL}/allowlist`)
+                    fetch(`${API_URL}/allowlist`),
+                    fetch(`${API_URL}/adblock/status`)
                 ]);
 
                 const statusData = await statusRes.json();
                 const devicesData = await devicesRes.json();
                 const blocklistData = await blocklistRes.json();
                 const allowlistData = await allowlistRes.json();
+                const adblockStatusData = await adblockStatusRes.json();
 
                 setInternetActive(statusData.internet_active);
                 setDevices(devicesData);
                 setBlockedApps(blocklistData.apps);
                 setCustomBlockList(blocklistData.custom);
                 setAllowList(allowlistData);
+                setAdblockStatus(adblockStatusData.status);
                 setLoading(false);
             } catch (error) {
                 console.error("Error fetching data:", error);
@@ -431,6 +542,46 @@ const App = () => {
 
         fetchData();
     }, []);
+
+    // Poll adblock status when loading
+    React.useEffect(() => {
+        if (adblockStatus !== 'loading') return;
+
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch(`${API_URL}/adblock/status`);
+                const data = await res.json();
+                setAdblockStatus(data.status);
+            } catch (error) {
+                console.error("Error polling adblock status:", error);
+            }
+        }, 2000);
+
+        return () => clearInterval(interval);
+    }, [adblockStatus, API_URL]);
+
+    // Fetch logs when expanded or status changes
+    React.useEffect(() => {
+        if (!logsExpanded && adblockStatus === 'idle') return;
+
+        const fetchLogs = async () => {
+            try {
+                const res = await fetch(`${API_URL}/adblock/logs`);
+                const logs = await res.json();
+                setAdblockLogs(logs);
+            } catch (error) {
+                console.error("Error fetching logs:", error);
+            }
+        };
+
+        fetchLogs();
+
+        // Auto-refresh logs while loading
+        if (adblockStatus === 'loading') {
+            const interval = setInterval(fetchLogs, 2000);
+            return () => clearInterval(interval);
+        }
+    }, [logsExpanded, adblockStatus, API_URL]);
 
     // Event Handlers
     const toggleInternet = async () => {
@@ -559,6 +710,10 @@ const App = () => {
                         blockedApps={blockedApps}
                         customBlockList={customBlockList}
                         allowList={allowList}
+                        adblockStatus={adblockStatus}
+                        adblockLogs={adblockLogs}
+                        logsExpanded={logsExpanded}
+                        toggleLogsExpanded={() => setLogsExpanded(!logsExpanded)}
                     />
                 )}
                 {activeTab === 'allowlist' && (
