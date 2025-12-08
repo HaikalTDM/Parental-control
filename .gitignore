@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Build outputs
 web-ui/dist/
 web-ui/node_modules/
@@ -41,3 +42,27 @@ __pycache__/
 # Artifacts
 .gemini/
 brain/
+=======
+# Node modules
+node_modules/
+# dist/
+build/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# PlatformIO
+.pio/
+.vscode/
+
+# System
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+>>>>>>> e2fc66cd8c03be46ac1e8eb273be9970ba1bd19a
