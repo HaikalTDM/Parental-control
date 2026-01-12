@@ -429,236 +429,62 @@ const MOCK_ALLOWLIST = [
     { id: 2, domain: "wikipedia.org", active: true },
 ];
 
-// Main App
+// Main App - DEMO ONLY VERSION (no backend needed)
 
 const App = () => {
     const [activeTab, setActiveTab] = useState('overview');
     const [internetActive, setInternetActive] = useState(true);
-    const [devices, setDevices] = useState(DEMO_MODE ? MOCK_DEVICES : []);
+    const [devices, setDevices] = useState(MOCK_DEVICES);
     const [blockedApps, setBlockedApps] = useState({});
-    const [customBlockList, setCustomBlockList] = useState(DEMO_MODE ? MOCK_BLOCKLIST : []);
-    const [allowList, setAllowList] = useState(DEMO_MODE ? MOCK_ALLOWLIST : []);
-    const [loading, setLoading] = useState(DEMO_MODE ? false : true);
-    const [adblockStatus, setAdblockStatus] = useState('idle'); // idle, loading, error
-    const [nextBlockId, setNextBlockId] = useState(DEMO_MODE ? 4 : 1);
-    const [nextAllowId, setNextAllowId] = useState(DEMO_MODE ? 3 : 1);
+    const [customBlockList, setCustomBlockList] = useState(MOCK_BLOCKLIST);
+    const [allowList, setAllowList] = useState(MOCK_ALLOWLIST);
+    const [nextBlockId, setNextBlockId] = useState(4);
+    const [nextAllowId, setNextAllowId] = useState(3);
 
-    const API_URL = import.meta.env.DEV ? 'http://localhost:5050/api' : '/api';
-
-    // Fetch Data (only in production mode)
-    React.useEffect(() => {
-        if (DEMO_MODE) return; // Skip API calls in demo mode
-
-        const fetchData = async () => {
-            try {
-                const [statusRes, devicesRes, blocklistRes, allowlistRes, adblockStatusRes] = await Promise.all([
-                    fetch(`${API_URL}/status`),
-                    fetch(`${API_URL}/devices`),
-                    fetch(`${API_URL}/blocklist`),
-                    fetch(`${API_URL}/allowlist`),
-                    fetch(`${API_URL}/adblock/status`)
-                ]);
-
-                const statusData = await statusRes.json();
-                const devicesData = await devicesRes.json();
-                const blocklistData = await blocklistRes.json();
-                const allowlistData = await allowlistRes.json();
-                const adblockStatusData = await adblockStatusRes.json();
-
-                setInternetActive(statusData.internet_active);
-                setDevices(devicesData);
-                setBlockedApps(blocklistData.apps);
-                setCustomBlockList(blocklistData.custom);
-                setAllowList(allowlistData);
-                setAdblockStatus(adblockStatusData.status);
-                setLoading(false);
-            } catch (error) {
-                console.error("Error fetching data:", error);
-                setLoading(false);
-            }
-        };
-
-        fetchData();
-    }, []);
-
-    // Poll adblock status when loading (only in production mode)
-    React.useEffect(() => {
-        if (DEMO_MODE) return;
-        if (adblockStatus !== 'loading') return;
-
-        const interval = setInterval(async () => {
-            try {
-                const res = await fetch(`${API_URL}/adblock/status`);
-                const data = await res.json();
-                setAdblockStatus(data.status);
-            } catch (error) {
-                console.error("Error polling adblock status:", error);
-            }
-        }, 2000);
-
-        return () => clearInterval(interval);
-    }, [adblockStatus, API_URL]);
-
-
-
-    // Event Handlers - Demo mode uses local state, production uses API
-    const toggleInternet = async () => {
-        if (DEMO_MODE) {
-            setInternetActive(!internetActive);
-            return;
-        }
-        try {
-            const res = await fetch(`${API_URL}/toggle-internet`, { method: 'POST' });
-            const data = await res.json();
-            setInternetActive(data.internet_active);
-        } catch (error) {
-            console.error("Error toggling internet:", error);
-        }
+    // Demo Event Handlers - all local state, no API calls
+    const toggleInternet = () => {
+        setInternetActive(!internetActive);
     };
 
-    const toggleDeviceBlock = async (id) => {
-        if (DEMO_MODE) {
-            setDevices(devices.map(d => d.id === id ? { ...d, blocked: !d.blocked } : d));
-            return;
-        }
-        try {
-            const res = await fetch(`${API_URL}/device/${id}/block`, { method: 'POST' });
-            const data = await res.json();
-            setDevices(data);
-        } catch (error) {
-            console.error("Error toggling device block:", error);
-        }
+    const toggleDeviceBlock = (id) => {
+        setDevices(devices.map(d => d.id === id ? { ...d, blocked: !d.blocked } : d));
     };
 
-    const toggleAppBlock = async (appId) => {
-        if (DEMO_MODE) {
-            setBlockedApps({ ...blockedApps, [appId]: !blockedApps[appId] });
-            return;
-        }
-        try {
-            const res = await fetch(`${API_URL}/blocklist/app`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: appId })
-            });
-            const data = await res.json();
-            setBlockedApps(data);
-        } catch (error) {
-            console.error("Error toggling app block:", error);
-        }
+    const toggleAppBlock = (appId) => {
+        setBlockedApps({ ...blockedApps, [appId]: !blockedApps[appId] });
     };
 
-    const addCustomBlock = async (domain) => {
-        if (DEMO_MODE) {
-            const newItem = { id: nextBlockId, domain, active: true };
-            setCustomBlockList([...customBlockList, newItem]);
-            setNextBlockId(nextBlockId + 1);
-            return;
-        }
-        try {
-            const res = await fetch(`${API_URL}/blocklist/custom`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ domain })
-            });
-            const data = await res.json();
-            setCustomBlockList(data);
-        } catch (error) {
-            console.error("Error adding custom block:", error);
-        }
+    const addCustomBlock = (domain) => {
+        const newItem = { id: nextBlockId, domain, active: true };
+        setCustomBlockList([...customBlockList, newItem]);
+        setNextBlockId(nextBlockId + 1);
     };
 
-    const removeCustomBlock = async (id) => {
-        if (DEMO_MODE) {
-            setCustomBlockList(customBlockList.filter(item => item.id !== id));
-            return;
-        }
-        try {
-            const res = await fetch(`${API_URL}/blocklist/custom?id=${id}`, { method: 'DELETE' });
-            const data = await res.json();
-            setCustomBlockList(data);
-        } catch (error) {
-            console.error("Error removing custom block:", error);
-        }
+    const removeCustomBlock = (id) => {
+        setCustomBlockList(customBlockList.filter(item => item.id !== id));
     };
 
-    const toggleCustomBlock = async (id) => {
-        if (DEMO_MODE) {
-            setCustomBlockList(customBlockList.map(item =>
-                item.id === id ? { ...item, active: !item.active } : item
-            ));
-            return;
-        }
-        try {
-            const res = await fetch(`${API_URL}/blocklist/custom/toggle`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id })
-            });
-            const data = await res.json();
-            setCustomBlockList(data);
-        } catch (error) {
-            console.error("Error toggling custom block:", error);
-        }
+    const toggleCustomBlock = (id) => {
+        setCustomBlockList(customBlockList.map(item =>
+            item.id === id ? { ...item, active: !item.active } : item
+        ));
     };
 
-    const addAllowDomain = async (domain) => {
-        if (DEMO_MODE) {
-            const newItem = { id: nextAllowId, domain, active: true };
-            setAllowList([...allowList, newItem]);
-            setNextAllowId(nextAllowId + 1);
-            return;
-        }
-        try {
-            const res = await fetch(`${API_URL}/allowlist`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ domain })
-            });
-            const data = await res.json();
-            setAllowList(data);
-        } catch (error) {
-            console.error("Error adding allow domain:", error);
-        }
+    const addAllowDomain = (domain) => {
+        const newItem = { id: nextAllowId, domain, active: true };
+        setAllowList([...allowList, newItem]);
+        setNextAllowId(nextAllowId + 1);
     };
 
-    const removeAllowDomain = async (id) => {
-        if (DEMO_MODE) {
-            setAllowList(allowList.filter(item => item.id !== id));
-            return;
-        }
-        try {
-            const res = await fetch(`${API_URL}/allowlist/${id}`, { method: 'DELETE' });
-            const data = await res.json();
-            setAllowList(data);
-        } catch (error) {
-            console.error("Error removing allow domain:", error);
-        }
+    const removeAllowDomain = (id) => {
+        setAllowList(allowList.filter(item => item.id !== id));
     };
 
-    const toggleAllowDomain = async (id) => {
-        if (DEMO_MODE) {
-            setAllowList(allowList.map(item =>
-                item.id === id ? { ...item, active: !item.active } : item
-            ));
-            return;
-        }
-        try {
-            const res = await fetch(`${API_URL}/allowlist/${id}/toggle`, { method: 'POST' });
-            const data = await res.json();
-            setAllowList(data);
-        } catch (error) {
-            console.error("Error toggling allow domain:", error);
-        }
+    const toggleAllowDomain = (id) => {
+        setAllowList(allowList.map(item =>
+            item.id === id ? { ...item, active: !item.active } : item
+        ));
     };
-
-    if (loading) {
-        return (
-            <div className="h-screen flex items-center justify-center bg-slate-50 text-slate-400">
-                <Activity className="w-8 h-8 animate-spin" />
-            </div>
-        );
-    }
 
     return (
         <div className="h-screen bg-slate-50 font-sans text-slate-900 flex flex-col max-w-md mx-auto relative shadow-2xl overflow-hidden selection:bg-indigo-100">
