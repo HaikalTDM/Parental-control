@@ -6,6 +6,11 @@ import {
     ArrowUp, ArrowDown, Users, ShieldAlert, Terminal, ChevronDown, ChevronUp
 } from 'lucide-react';
 
+// ====== DEMO MODE ======
+// Set to true for functional video demo (no backend needed)
+// Set to false for production with real ESP32/OpenWRT
+const DEMO_MODE = true;
+
 // UI Components
 
 const Switch = ({ checked, onCheckedChange, colorClass = "bg-slate-900" }) => (
@@ -404,11 +409,6 @@ const AllowlistView = ({ allowList, addAllowDomain, removeAllowDomain, toggleAll
         </div>
     );
 };
-
-// ====== DEMO MODE ======
-// Set to true for functional video demo (no backend needed)
-// Set to false for production with real ESP32/OpenWRT
-const DEMO_MODE = true;
 
 // Mock data for demo mode
 const MOCK_DEVICES = [
