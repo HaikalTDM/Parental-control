@@ -74,94 +74,34 @@ const StatCard = ({ icon: Icon, label, value, subValue, colorClass, bgClass }) =
     </Card>
 );
 
-const LogViewer = ({ logs, isLoading, expanded, toggleExpanded }) => {
-    const logContainerRef = React.useRef(null);
 
-    // Auto-scroll to bottom when new logs arrive
-    React.useEffect(() => {
-        if (logContainerRef.current && expanded) {
-            logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
-        }
-    }, [logs, expanded]);
 
-    const getLogLevelColor = (level) => {
-        switch (level) {
-            case 'error':
-                return 'text-rose-600 bg-rose-50';
-            case 'success':
-                return 'text-emerald-600 bg-emerald-50';
-            default:
-                return 'text-blue-600 bg-blue-50';
-        }
-    };
+const Dashboard = ({ internetActive, toggleInternet, devices, blockedApps, customBlockList, allowList, adblockStatus }) => {
+    const [networkStats, setNetworkStats] = React.useState({ speed: 45, data_usage: 0 });
+    const API_URL = import.meta.env.DEV ? 'http://localhost:5050/api' : '/api';
 
-    return (
-        <Card className="overflow-hidden">
-            <button
-                onClick={toggleExpanded}
-                className="w-full p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
-            >
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-slate-100 rounded-lg text-slate-600">
-                        <Terminal className="w-5 h-5" />
-                    </div>
-                    <div className="text-left">
-                        <p className="text-sm font-bold text-slate-700">System Logs</p>
-                        <p className="text-xs text-slate-400">
-                            {isLoading ? 'Updating blocklist...' : `${logs.length} entries`}
-                        </p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-2">
-                    {isLoading && (
-                        <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
-                    )}
-                    {expanded ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
-                </div>
-            </button>
-
-            {expanded && (
-                <div className="border-t border-slate-200">
-                    <div
-                        ref={logContainerRef}
-                        className="max-h-72 overflow-y-auto p-3 space-y-2 bg-slate-50/50"
-                    >
-                        {logs.length === 0 ? (
-                            <div className="text-center py-8 text-slate-400 text-sm">
-                                No logs available yet
-                            </div>
-                        ) : (
-                            logs.map((log, index) => (
-                                <div
-                                    key={index}
-                                    className={`p-2.5 rounded-lg border ${getLogLevelColor(log.level)} border-opacity-50`}
-                                >
-                                    <div className="flex items-start gap-2">
-                                        <div className="flex-1">
-                                            <p className="text-xs font-mono text-slate-500 mb-1">
-                                                {log.timestamp}
-                                            </p>
-                                            <p className="text-xs text-slate-700 leading-relaxed">
-                                                {log.message}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                    </div>
-                </div>
-            )}
-        </Card>
-    );
-};
-
-const Dashboard = ({ internetActive, toggleInternet, devices, blockedApps, customBlockList, allowList, adblockStatus, adblockLogs, logsExpanded, toggleLogsExpanded }) => {
-    const onlineDevices = devices.filter(d => d.status === 'online').length;
-    const totalAppsBlocked = Object.values(blockedApps).filter(Boolean).length;
-    const activeCustomBlocks = customBlockList.filter(d => d.active).length;
+    const onlineDevices = (devices || []).filter(d => d.status === 'online').length;
+    const totalAppsBlocked = Object.values(blockedApps || {}).filter(Boolean).length;
+    const activeCustomBlocks = (customBlockList || []).filter(d => d.active).length;
     const totalBlocked = totalAppsBlocked + activeCustomBlocks;
-    const totalAllowed = allowList.filter(d => d.active).length;
+    const totalAllowed = (allowList || []).filter(d => d.active).length;
+
+    // Fetch network stats periodically
+    React.useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const res = await fetch(`${API_URL}/stats`);
+                const data = await res.json();
+                setNetworkStats(data);
+            } catch (error) {
+                console.error("Error fetching network stats:", error);
+            }
+        };
+
+        fetchStats();
+        const interval = setInterval(fetchStats, 5000); // Update every 5 seconds
+        return () => clearInterval(interval);
+    }, [API_URL]);
 
     // Determine status display
     const getStatusInfo = () => {
@@ -228,19 +168,14 @@ const Dashboard = ({ internetActive, toggleInternet, devices, blockedApps, custo
                 <StatCard
                     icon={Zap}
                     label="Speed"
-                    value="45"
+                    value={networkStats.speed}
                     subValue="Mbps Avg."
                     colorClass="text-amber-600"
                     bgClass="bg-amber-50"
                 />
             </div>
 
-            <LogViewer
-                logs={adblockLogs}
-                isLoading={adblockStatus === 'loading'}
-                expanded={logsExpanded}
-                toggleExpanded={toggleLogsExpanded}
-            />
+
 
             <Card className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -253,7 +188,7 @@ const Dashboard = ({ internetActive, toggleInternet, devices, blockedApps, custo
                     </div>
                 </div>
                 <div className="text-right">
-                    <p className="text-lg font-bold text-slate-800">4.2 GB</p>
+                    <p className="text-lg font-bold text-slate-800">{(networkStats.data_usage / 1024).toFixed(1)} GB</p>
                     <div className="flex items-center gap-1 text-emerald-500 text-xs font-bold">
                         <ArrowDown className="w-3 h-3" />
                         <span>12%</span>
@@ -321,13 +256,7 @@ const BlocklistView = ({ blockedApps, toggleAppBlock, customBlockList, addCustom
         }
     }
 
-    const apps = [
-        { id: 'youtube', name: 'YouTube', icon: <Youtube />, color: 'text-red-600 bg-red-50' },
-        { id: 'tiktok', name: 'TikTok', icon: <PlayCircle />, color: 'text-pink-600 bg-pink-50' },
-        { id: 'facebook', name: 'Facebook', icon: <Facebook />, color: 'text-blue-600 bg-blue-50' },
-        { id: 'roblox', name: 'Roblox', icon: <Gamepad2 />, color: 'text-orange-600 bg-orange-50' },
-        { id: 'instagram', name: 'Instagram', icon: <Instagram />, color: 'text-purple-600 bg-purple-50' },
-    ];
+
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -336,26 +265,7 @@ const BlocklistView = ({ blockedApps, toggleAppBlock, customBlockList, addCustom
                 <p className="text-sm text-slate-500 font-medium">Prevent access to these sites</p>
             </div>
 
-            <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase text-slate-400 tracking-wider px-1">Popular Apps</h3>
-                {apps.map((app) => (
-                    <Card key={app.id} className="p-3 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-opacity duration-200 ${blockedApps[app.id] ? 'opacity-50 grayscale' : 'opacity-100'} ${app.color}`}>
-                                {React.cloneElement(app.icon, { size: 20 })}
-                            </div>
-                            <span className={`font-bold text-sm transition-colors duration-200 ${blockedApps[app.id] ? 'text-slate-400' : 'text-slate-700'}`}>
-                                {app.name}
-                            </span>
-                        </div>
-                        <Switch
-                            checked={blockedApps[app.id]}
-                            onCheckedChange={() => toggleAppBlock(app.id)}
-                            colorClass="bg-rose-500"
-                        />
-                    </Card>
-                ))}
-            </div>
+
 
             <div className="space-y-3">
                 <h3 className="text-xs font-bold uppercase text-slate-400 tracking-wider px-1">Custom Domains</h3>
@@ -504,8 +414,7 @@ const App = () => {
     const [allowList, setAllowList] = useState([]);
     const [loading, setLoading] = useState(true);
     const [adblockStatus, setAdblockStatus] = useState('idle'); // idle, loading, error
-    const [adblockLogs, setAdblockLogs] = useState([]);
-    const [logsExpanded, setLogsExpanded] = useState(false);
+
 
     const API_URL = import.meta.env.DEV ? 'http://localhost:5050/api' : '/api';
 
@@ -560,28 +469,7 @@ const App = () => {
         return () => clearInterval(interval);
     }, [adblockStatus, API_URL]);
 
-    // Fetch logs when expanded or status changes
-    React.useEffect(() => {
-        if (!logsExpanded && adblockStatus === 'idle') return;
 
-        const fetchLogs = async () => {
-            try {
-                const res = await fetch(`${API_URL}/adblock/logs`);
-                const logs = await res.json();
-                setAdblockLogs(logs);
-            } catch (error) {
-                console.error("Error fetching logs:", error);
-            }
-        };
-
-        fetchLogs();
-
-        // Auto-refresh logs while loading
-        if (adblockStatus === 'loading') {
-            const interval = setInterval(fetchLogs, 2000);
-            return () => clearInterval(interval);
-        }
-    }, [logsExpanded, adblockStatus, API_URL]);
 
     // Event Handlers
     const toggleInternet = async () => {
@@ -634,7 +522,7 @@ const App = () => {
 
     const removeCustomBlock = async (id) => {
         try {
-            const res = await fetch(`${API_URL}/blocklist/custom/${id}`, { method: 'DELETE' });
+            const res = await fetch(`${API_URL}/blocklist/custom?id=${id}`, { method: 'DELETE' });
             const data = await res.json();
             setCustomBlockList(data);
         } catch (error) {
@@ -644,7 +532,11 @@ const App = () => {
 
     const toggleCustomBlock = async (id) => {
         try {
-            const res = await fetch(`${API_URL}/blocklist/custom/${id}/toggle`, { method: 'POST' });
+            const res = await fetch(`${API_URL}/blocklist/custom/toggle`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
             const data = await res.json();
             setCustomBlockList(data);
         } catch (error) {
@@ -710,10 +602,7 @@ const App = () => {
                         blockedApps={blockedApps}
                         customBlockList={customBlockList}
                         allowList={allowList}
-                        adblockStatus={adblockStatus}
-                        adblockLogs={adblockLogs}
-                        logsExpanded={logsExpanded}
-                        toggleLogsExpanded={() => setLogsExpanded(!logsExpanded)}
+
                     />
                 )}
                 {activeTab === 'allowlist' && (

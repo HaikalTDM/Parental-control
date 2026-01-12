@@ -1,5 +1,5 @@
 {
-  "internet_active": true,
+  "internet_active": false,
   "devices": [
     {
       "id": 1,
@@ -41,6 +41,11 @@
     {
       "id": 2,
       "domain": "adult-site.com",
+      "active": false
+    },
+    {
+      "id": 3,
+      "domain": "example.com",
       "active": true
     }
   ],
