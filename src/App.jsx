@@ -77,7 +77,7 @@ const StatCard = ({ icon: Icon, label, value, subValue, colorClass, bgClass }) =
 
 
 const Dashboard = ({ internetActive, toggleInternet, devices, blockedApps, customBlockList, allowList, adblockStatus }) => {
-    const [networkStats, setNetworkStats] = React.useState({ speed: 45, data_usage: 0 });
+    const [networkStats, setNetworkStats] = React.useState({ speed: 45, data_usage: 2048 });
     const API_URL = import.meta.env.DEV ? 'http://localhost:5050/api' : '/api';
 
     const onlineDevices = (devices || []).filter(d => d.status === 'online').length;
@@ -86,8 +86,10 @@ const Dashboard = ({ internetActive, toggleInternet, devices, blockedApps, custo
     const totalBlocked = totalAppsBlocked + activeCustomBlocks;
     const totalAllowed = (allowList || []).filter(d => d.active).length;
 
-    // Fetch network stats periodically
+    // Fetch network stats periodically (skip in demo mode)
     React.useEffect(() => {
+        if (DEMO_MODE) return; // Use default mock values in demo mode
+
         const fetchStats = async () => {
             try {
                 const res = await fetch(`${API_URL}/stats`);
@@ -403,23 +405,50 @@ const AllowlistView = ({ allowList, addAllowDomain, removeAllowDomain, toggleAll
     );
 };
 
+// ====== DEMO MODE ======
+// Set to true for functional video demo (no backend needed)
+// Set to false for production with real ESP32/OpenWRT
+const DEMO_MODE = true;
+
+// Mock data for demo mode
+const MOCK_DEVICES = [
+    { id: 1, name: "iPhone 13", type: "phone", status: "online", blocked: false, usage: "1.2 GB" },
+    { id: 2, name: "MacBook Pro", type: "laptop", status: "online", blocked: false, usage: "3.5 GB" },
+    { id: 3, name: "iPad Mini", type: "tablet", status: "online", blocked: false, usage: "0.8 GB" },
+    { id: 4, name: "Smart TV", type: "tv", status: "offline", blocked: false, usage: "2.1 GB" },
+];
+
+const MOCK_BLOCKLIST = [
+    { id: 1, domain: "facebook.com", active: true },
+    { id: 2, domain: "tiktok.com", active: true },
+    { id: 3, domain: "gambling.com", active: true },
+];
+
+const MOCK_ALLOWLIST = [
+    { id: 1, domain: "google.com", active: true },
+    { id: 2, domain: "wikipedia.org", active: true },
+];
+
 // Main App
 
 const App = () => {
     const [activeTab, setActiveTab] = useState('overview');
     const [internetActive, setInternetActive] = useState(true);
-    const [devices, setDevices] = useState([]);
+    const [devices, setDevices] = useState(DEMO_MODE ? MOCK_DEVICES : []);
     const [blockedApps, setBlockedApps] = useState({});
-    const [customBlockList, setCustomBlockList] = useState([]);
-    const [allowList, setAllowList] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [customBlockList, setCustomBlockList] = useState(DEMO_MODE ? MOCK_BLOCKLIST : []);
+    const [allowList, setAllowList] = useState(DEMO_MODE ? MOCK_ALLOWLIST : []);
+    const [loading, setLoading] = useState(DEMO_MODE ? false : true);
     const [adblockStatus, setAdblockStatus] = useState('idle'); // idle, loading, error
-
+    const [nextBlockId, setNextBlockId] = useState(DEMO_MODE ? 4 : 1);
+    const [nextAllowId, setNextAllowId] = useState(DEMO_MODE ? 3 : 1);
 
     const API_URL = import.meta.env.DEV ? 'http://localhost:5050/api' : '/api';
 
-    // Fetch Data
+    // Fetch Data (only in production mode)
     React.useEffect(() => {
+        if (DEMO_MODE) return; // Skip API calls in demo mode
+
         const fetchData = async () => {
             try {
                 const [statusRes, devicesRes, blocklistRes, allowlistRes, adblockStatusRes] = await Promise.all([
@@ -452,8 +481,9 @@ const App = () => {
         fetchData();
     }, []);
 
-    // Poll adblock status when loading
+    // Poll adblock status when loading (only in production mode)
     React.useEffect(() => {
+        if (DEMO_MODE) return;
         if (adblockStatus !== 'loading') return;
 
         const interval = setInterval(async () => {
@@ -471,8 +501,12 @@ const App = () => {
 
 
 
-    // Event Handlers
+    // Event Handlers - Demo mode uses local state, production uses API
     const toggleInternet = async () => {
+        if (DEMO_MODE) {
+            setInternetActive(!internetActive);
+            return;
+        }
         try {
             const res = await fetch(`${API_URL}/toggle-internet`, { method: 'POST' });
             const data = await res.json();
@@ -483,6 +517,10 @@ const App = () => {
     };
 
     const toggleDeviceBlock = async (id) => {
+        if (DEMO_MODE) {
+            setDevices(devices.map(d => d.id === id ? { ...d, blocked: !d.blocked } : d));
+            return;
+        }
         try {
             const res = await fetch(`${API_URL}/device/${id}/block`, { method: 'POST' });
             const data = await res.json();
@@ -493,6 +531,10 @@ const App = () => {
     };
 
     const toggleAppBlock = async (appId) => {
+        if (DEMO_MODE) {
+            setBlockedApps({ ...blockedApps, [appId]: !blockedApps[appId] });
+            return;
+        }
         try {
             const res = await fetch(`${API_URL}/blocklist/app`, {
                 method: 'POST',
@@ -507,6 +549,12 @@ const App = () => {
     };
 
     const addCustomBlock = async (domain) => {
+        if (DEMO_MODE) {
+            const newItem = { id: nextBlockId, domain, active: true };
+            setCustomBlockList([...customBlockList, newItem]);
+            setNextBlockId(nextBlockId + 1);
+            return;
+        }
         try {
             const res = await fetch(`${API_URL}/blocklist/custom`, {
                 method: 'POST',
@@ -521,6 +569,10 @@ const App = () => {
     };
 
     const removeCustomBlock = async (id) => {
+        if (DEMO_MODE) {
+            setCustomBlockList(customBlockList.filter(item => item.id !== id));
+            return;
+        }
         try {
             const res = await fetch(`${API_URL}/blocklist/custom?id=${id}`, { method: 'DELETE' });
             const data = await res.json();
@@ -531,6 +583,12 @@ const App = () => {
     };
 
     const toggleCustomBlock = async (id) => {
+        if (DEMO_MODE) {
+            setCustomBlockList(customBlockList.map(item =>
+                item.id === id ? { ...item, active: !item.active } : item
+            ));
+            return;
+        }
         try {
             const res = await fetch(`${API_URL}/blocklist/custom/toggle`, {
                 method: 'POST',
@@ -545,6 +603,12 @@ const App = () => {
     };
 
     const addAllowDomain = async (domain) => {
+        if (DEMO_MODE) {
+            const newItem = { id: nextAllowId, domain, active: true };
+            setAllowList([...allowList, newItem]);
+            setNextAllowId(nextAllowId + 1);
+            return;
+        }
         try {
             const res = await fetch(`${API_URL}/allowlist`, {
                 method: 'POST',
@@ -559,6 +623,10 @@ const App = () => {
     };
 
     const removeAllowDomain = async (id) => {
+        if (DEMO_MODE) {
+            setAllowList(allowList.filter(item => item.id !== id));
+            return;
+        }
         try {
             const res = await fetch(`${API_URL}/allowlist/${id}`, { method: 'DELETE' });
             const data = await res.json();
@@ -569,6 +637,12 @@ const App = () => {
     };
 
     const toggleAllowDomain = async (id) => {
+        if (DEMO_MODE) {
+            setAllowList(allowList.map(item =>
+                item.id === id ? { ...item, active: !item.active } : item
+            ));
+            return;
+        }
         try {
             const res = await fetch(`${API_URL}/allowlist/${id}/toggle`, { method: 'POST' });
             const data = await res.json();
